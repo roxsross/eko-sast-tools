@@ -1,0 +1,2 @@
+# Ekoparty - Vulnerable demo app
+
