@@ -9,8 +9,19 @@ on:
       - "master"
 
 jobs:
+  secret:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+      with:
+        fetch-depth: 0
+    - uses: gitleaks/gitleaks-action@v2
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUBTOKEN }}
+
   sonarqube:
     runs-on: ubuntu-latest
+    needs: secret
     steps:
     - uses: actions/checkout@v2
       with:
@@ -33,12 +44,7 @@ jobs:
       id: sonarqube-quality-gate-check
       uses: sonarsource/sonarqube-quality-gate-action@master
       #continue-on-error: true
-      # Force to fail step after specific time.
       timeout-minutes: 5
       env:
        SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-
-    # Optionally you can use the output from the Quality Gate in another step.
-    # The possible outputs of the `quality-gate-status` variable are `PASSED`, `WARN` or `FAILED`.
-    - name: "Example show SonarQube Quality Gate Status value"
-      run: echo "The Quality Gate status is ${{ steps.sonarqube-quality-gate-check.outputs.quality-gate-status }}"
+       SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
