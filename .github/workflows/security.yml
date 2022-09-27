@@ -8,68 +8,96 @@ on:
       branches:
       - "master"
 
+env:
+  IMAGE_NAME: sast
+
 jobs:
-  secret:
-      runs-on: ubuntu-latest
-      steps:
-      - uses: actions/checkout@v2
-        with:
-          fetch-depth: 0
-      - uses: gitleaks/gitleaks-action@v2
-        continue-on-error: true
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUBTOKEN }}
-      - name: GitGuardian scan
-        uses: GitGuardian/ggshield-action@master
-        env:
-          GITHUB_PUSH_BEFORE_SHA: ${{ github.event.before }}
-          GITHUB_PUSH_BASE_SHA: ${{ github.event.base }}
-          GITHUB_PULL_BASE_SHA:  ${{ github.event.pull_request.base.sha }}
-          GITHUB_DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
-          GITGUARDIAN_API_KEY: ${{ secrets.GITGUARDIAN_API_KEY }}
+  # secret:
+  #     runs-on: ubuntu-latest
+  #     steps:
+  #     - uses: actions/checkout@v2
+  #       with:
+  #         fetch-depth: 0
+  #     - uses: gitleaks/gitleaks-action@v2
+  #       continue-on-error: true
+  #       env:
+  #         GITHUB_TOKEN: ${{ secrets.GITHUBTOKEN }}
+  #     - name: GitGuardian scan
+  #       uses: GitGuardian/ggshield-action@master
+  #       env:
+  #         GITHUB_PUSH_BEFORE_SHA: ${{ github.event.before }}
+  #         GITHUB_PUSH_BASE_SHA: ${{ github.event.base }}
+  #         GITHUB_PULL_BASE_SHA:  ${{ github.event.pull_request.base.sha }}
+  #         GITHUB_DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+  #         GITGUARDIAN_API_KEY: ${{ secrets.GITGUARDIAN_API_KEY }}
 
-      - name: Running Horusec Security Download latest version
-        continue-on-error: true
+  #     - name: Running Horusec Security Download latest version
+  #       continue-on-error: true
+  #       run: |
+  #         curl -fsSL https://raw.githubusercontent.com/ZupIT/horusec/main/deployments/scripts/install.sh | bash -s latest
+  #         horusec start -p="./"  
+
+  # sonarqube:
+  #   runs-on: ubuntu-latest
+  #   needs: secret
+  #   steps:
+  #   - uses: actions/checkout@v2
+  #     with:
+  #       fetch-depth: 0
+  #   - name: SonarQube Scan
+  #     uses: sonarsource/sonarqube-scan-action@master
+  #     env:
+  #       SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+  #       SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+  #     with:
+  #       projectBaseDir: . 
+  #       args: >
+  #         -Dsonar.projectKey=${{ github.event.repository.name}}
+  #         -Dsonar.projectName=${{ github.event.repository.name}}  
+  #         -Dsonar.source=. 
+  #         -Dsonar.sourceEncoding=UTF-8       
+
+  #   # Check the Quality Gate status.
+  #   - name: SonarQube Quality Gate check
+  #     id: sonarqube-quality-gate-check
+  #     uses: sonarsource/sonarqube-quality-gate-action@master
+  #     #continue-on-error: true
+  #     timeout-minutes: 5
+  #     env:
+  #      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+  #      SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+
+  # snyk:
+  #   runs-on: ubuntu-latest
+  #   needs: sonarqube
+  #   steps:
+  #     - uses: actions/checkout@master
+  #     - name: Run Snyk to check for vulnerabilities
+  #       uses: snyk/actions/node@master
+  #       env:
+  #         SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+
+  trivy-image:
+    name: Trivy Image
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@master
+      - name: Docker Build
         run: |
-          curl -fsSL https://raw.githubusercontent.com/ZupIT/horusec/main/deployments/scripts/install.sh | bash -s latest
-          horusec start -p="./"  
-
-  sonarqube:
-    runs-on: ubuntu-latest
-    needs: secret
-    steps:
-    - uses: actions/checkout@v2
-      with:
-        fetch-depth: 0
-    - name: SonarQube Scan
-      uses: sonarsource/sonarqube-scan-action@master
-      env:
-        SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-        SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
-      with:
-        projectBaseDir: . 
-        args: >
-          -Dsonar.projectKey=${{ github.event.repository.name}}
-          -Dsonar.projectName=${{ github.event.repository.name}}  
-          -Dsonar.source=. 
-          -Dsonar.sourceEncoding=UTF-8       
-
-    # Check the Quality Gate status.
-    - name: SonarQube Quality Gate check
-      id: sonarqube-quality-gate-check
-      uses: sonarsource/sonarqube-quality-gate-action@master
-      #continue-on-error: true
-      timeout-minutes: 5
-      env:
-       SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-       SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
-
-  snyk:
-    runs-on: ubuntu-latest
-    needs: sonarqube
-    steps:
-      - uses: actions/checkout@master
-      - name: Run Snyk to check for vulnerabilities
-        uses: snyk/actions/node@master
-        env:
-          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+          docker build -t ${{ env.IMAGE_NAME }} .
+      - name: Trivy Scan Image
+        uses: aquasecurity/trivy-action@master
+        continue-on-error: true 
+        with:
+          image-ref: ${{ env.IMAGE_NAME }}
+          #vuln-type: "os,library"
+          format: sarif
+          output: trivy_image.sarif
+          severity: MEDIUM,HIGH,CRITICAL
+          #exit-code: "0"
+      - name: Upload SARIF file
+        if: always()
+        uses: github/codeql-action/upload-sarif@v2
+        with:
+          sarif_file: trivy_image.sarif        
