@@ -19,14 +19,14 @@ jobs:
       - uses: actions/checkout@v3
         with:
           fetch-depth: 0
-      - name: gitleaks-action
-        uses: zricethezav/gitleaks-action@master
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUBTOKEN }}
         continue-on-error: true 
-
+#secret
   horusec-security:
     name: horusec-security
     runs-on: ubuntu-latest
-    needs: gitleaks
     steps:
       - name: Check out code into the Go module directory
         uses: actions/checkout@v3
@@ -41,7 +41,15 @@ jobs:
         with:
           name: horusec
           path: horusec-config.json  
-
+          - name: GitGuardian scan
+        uses: GitGuardian/ggshield-action@master
+        env:
+          GITHUB_PUSH_BEFORE_SHA: ${{ github.event.before }}
+          GITHUB_PUSH_BASE_SHA: ${{ github.event.base }}
+          GITHUB_PULL_BASE_SHA:  ${{ github.event.pull_request.base.sha }}
+          GITHUB_DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          GITGUARDIAN_API_KEY: ${{ secrets.GITGUARDIAN_API_KEY }}      
+#sast
   sonar:
     runs-on: ubuntu-latest
     steps:
@@ -62,11 +70,32 @@ jobs:
     
       - name: SonarQube Quality Gate check
         uses: sonarsource/sonarqube-quality-gate-action@master
-        # Force to fail step after specific time
         timeout-minutes: 5
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}   
+#SCA
+  snyk-code-SCA:
+    name: Snyk Code
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@master
+      - name: Run Snyk to check for vulnerabilities
+        uses: snyk/actions/node@master
+        continue-on-error: true
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        with:
+          args: >
+            --severity-threshold=high
+            --all-projects
+            --sarif-file-output=snyk-code.sarif
+      - name: Upload SARIF file
+        #if: always()
+        uses: github/codeql-action/upload-sarif@v2
+        with:
+          sarif_file: snyk-code.sarif  
 
+#scan container
   trivy:
     name: trivy
     runs-on: ubuntu-latest
@@ -90,7 +119,7 @@ jobs:
         uses: github/codeql-action/upload-sarif@v2
         with:
           sarif_file: 'trivy-results.sarif'
-
+#scan container
   anchore:
     name: Anchore
     runs-on: ubuntu-latest
@@ -116,31 +145,10 @@ jobs:
         with:
           sarif_file: ${{ steps.scan.outputs.sarif }}
 
-  snyk-code:
-    name: Snyk Code
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@master
-      - name: Run Snyk to check for vulnerabilities
-        uses: snyk/actions/node@master
-        continue-on-error: true
-        env:
-          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
-        with:
-          args: >
-            --severity-threshold=high
-            --all-projects
-            --sarif-file-output=snyk-code.sarif
-      - name: Upload SARIF file
-        #if: always()
-        uses: github/codeql-action/upload-sarif@v2
-        with:
-          sarif_file: snyk-code.sarif  
-
+#scan container
   snyk-container:
     name: Snyk Container
     runs-on: ubuntu-latest
-    needs: snyk-code
     steps:
       ## Checkout is required since Snyk needs the Dockerfile for the Sarif report
       - name: Checkout repository
@@ -164,6 +172,7 @@ jobs:
         with:
           sarif_file: snyk.sarif
 
+#scan iac
   checkov:
     name: Checkov
     runs-on: ubuntu-latest
