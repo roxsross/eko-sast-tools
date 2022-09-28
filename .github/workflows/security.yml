@@ -23,6 +23,19 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUBTOKEN }}
         continue-on-error: true 
+     #secret 
+      - name: Semgrep
+        id: semgrep
+        uses: returntocorp/semgrep-action@v1
+        continue-on-error: true 
+        with:
+          config: p/r2c-ci
+          generatesarif: "1"
+      - name: upload to github code scanning
+        uses: github/codeql-action/upload-sarif@v2
+        with:
+          sarif_file: semgrep.sarif
+        if: always()       
 #secret
   horusec-security:
     name: horusec-security
@@ -57,6 +70,7 @@ jobs:
 
       - name: SonarQube Scan
         uses: sonarsource/sonarqube-scan-action@master
+        continue-on-error: true
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
           SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }} 
@@ -70,6 +84,7 @@ jobs:
     
       - name: SonarQube Quality Gate check
         uses: sonarsource/sonarqube-quality-gate-action@master
+        continue-on-error: true
         timeout-minutes: 5
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}   
@@ -143,35 +158,6 @@ jobs:
         uses: github/codeql-action/upload-sarif@v2
         with:
           sarif_file: ${{ steps.scan.outputs.sarif }}
-
-#scan container
-  snyk-container:
-    name: Snyk Container
-    runs-on: ubuntu-latest
-    steps:
-      ## Checkout is required since Snyk needs the Dockerfile for the Sarif report
-      - name: Checkout repository
-        uses: actions/checkout@master
-      - name: Docker Build
-        run: |
-          docker build -t image-snyk:${{ github.sha }} . 
-      - name: Snyk
-        uses: snyk/actions/docker@master
-        continue-on-error: true
-        env:
-          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
-        with:
-          image: image-snyk:${{ github.sha }}
-          args: >
-            --file=Dockerfile
-            --severity-threshold=high
-            --sarif-file-output=snyk.sarif
-      - name: Upload SARIF file
-        #if: always()
-        uses: github/codeql-action/upload-sarif@v2
-        with:
-          sarif_file: snyk.sarif
-
 #scan iac
   checkov:
     name: Checkov
