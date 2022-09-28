@@ -41,7 +41,7 @@ jobs:
         with:
           name: horusec
           path: horusec-config.json  
-          - name: GitGuardian scan
+      - name: GitGuardian scan
         uses: GitGuardian/ggshield-action@master
         env:
           GITHUB_PUSH_BEFORE_SHA: ${{ github.event.before }}
