@@ -166,6 +166,7 @@ jobs:
           args: >
             --file=Dockerfile
             --severity-threshold=high
+            --sarif-file-output=snyk.sarif
       - name: Upload SARIF file
         #if: always()
         uses: github/codeql-action/upload-sarif@v2
